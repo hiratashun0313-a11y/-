@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>休み時間</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #1a1a2e;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+  }
+
+  #game-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    padding-top: 8px;
+  }
+
+  /* HUD */
+  #hud {
+    width: 100%;
+    max-width: 400px;
+    padding: 0 12px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  #hud-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  #timer-text {
+    color: #e8e0c8;
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    min-width: 52px;
+  }
+
+  #timer-bar-bg {
+    flex: 1;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+  }
+
+  #timer-bar {
+    height: 100%;
+    background: #c8a84b;
+    border-radius: 2px;
+    transition: width 0.5s linear, background 0.5s;
+  }
+
+  #floor-badge {
+    color: #888;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    min-width: 28px;
+    text-align: right;
+  }
+
+  #tasks-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .task-chip {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    border: 1px solid #444;
+    color: #666;
+    background: none;
+    transition: all 0.3s;
+  }
+
+  .task-chip.done {
+    border-color: #60c860;
+    color: #60c860;
+    text-decoration: line-through;
+  }
+
+  .task-chip.active {
+    border-color: #c8a84b;
+    color: #c8a84b;
+  }
+
+  /* キャンバス */
+  #canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+    max-width: 400px;
+    width: 100%;
+  }
+
+  /* メッセージ */
+  #message {
+    color: #aaa;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    height: 18px;
+    text-align: center;
+    margin-top: 4px;
+    max-width: 400px;
+    width: 100%;
+    padding: 0 12px;
+  }
+
+  /* 十字キー */
+  #dpad {
+    position: fixed;
+    bottom: 24px;
+    left: 20px;
+    width: 120px;
+    height: 120px;
+    display: grid;
+    grid-template-areas:
+      ". up ."
+      "left . right"
+      ". down .";
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+
+  .dpad-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 16px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.1s;
+  }
+
+  .dpad-btn:active, .dpad-btn.pressed {
+    background: rgba(200,168,75,0.25);
+    color: #c8a84b;
+  }
+
+  #btn-up    { grid-area: up; }
+  #btn-left  { grid-area: left; }
+  #btn-right { grid-area: right; }
+  #btn-down  { grid-area: down; }
+
+  /* アクションボタン */
+  #action-btn {
+    position: fixed;
+    bottom: 40px;
+    right: 24px;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(200,168,75,0.15);
+    border: 2px solid rgba(200,168,75,0.4);
+    color: #c8a84b;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.4;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: all 0.1s;
+    opacity: 0.3;
+  }
+
+  #action-btn.active {
+    opacity: 1;
+    background: rgba(200,168,75,0.3);
+    border-color: #c8a84b;
+  }
+
+  #action-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* オーバーレイ */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,46,0.97);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 32px;
+  }
+
+  #overlay h1 {
+    color: #e8e0c8;
+    font-size: 28px;
+    letter-spacing: 0.3em;
+    margin-bottom: 10px;
+    font-weight: normal;
+  }
+
+  #overlay .sub {
+    color: #555;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    margin-bottom: 40px;
+    line-height: 2;
+    text-align: center;
+  }
+
+  #result-list {
+    color: #666;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    margin-bottom: 36px;
+    line-height: 2.4;
+    text-align: left;
+    width: 100%;
+    max-width: 280px;
+    display: none;
+  }
+
+  #result-list .ok  { color: #60c860; }
+  #result-list .ng  { color: #c86060; }
+
+  #overlay-btn {
+    background: none;
+    border: 1px solid #555;
+    color: #e8e0c8;
+    padding: 14px 48px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.25em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  #overlay-btn:active { border-color: #c8a84b; color: #c8a84b; }
+
+  /* 走るボタン */
+  #run-btn {
+    position: fixed;
+    bottom: 120px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(200,80,80,0.12);
+    border: 2px solid rgba(200,80,80,0.3);
+    color: #c85050;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: all 0.1s;
+    font-family: 'Courier New', monospace;
+  }
+
+  #run-btn.active {
+    background: rgba(200,80,80,0.35);
+    border-color: #c85050;
+  }
+
+  /* 先生に捕まった警告 */
+  #caught-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(180,40,40,0.15);
+    z-index: 60;
+    display: none;
+    pointer-events: none;
+    border: 3px solid rgba(200,60,60,0.6);
+  }
+
+  /* 階移動エフェクト */
+  #floor-transition {
+    position: fixed;
+    inset: 0;
+    background: #1a1a2e;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <div id="hud">
+    <div id="hud-top">
+      <div id="timer-text">10:00</div>
+      <div id="timer-bar-bg"><div id="timer-bar" style="width:100%"></div></div>
+      <div id="floor-badge">4F</div>
+    </div>
+    <div id="tasks-row"></div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <div id="message">　</div>
+</div>
+
+<!-- 十字キー -->
+<div id="dpad">
+  <div class="dpad-btn" id="btn-up">▲</div>
+  <div class="dpad-btn" id="btn-left">◀</div>
+  <div class="dpad-btn" id="btn-right">▶</div>
+  <div class="dpad-btn" id="btn-down">▼</div>
+</div>
+
+<!-- アクションボタン -->
+<div id="action-btn" onclick="doAction()">使う</div>
+
+<!-- 走るボタン -->
+<div id="run-btn">走る</div>
+
+<!-- 階段メニュー -->
+<div id="stair-menu" style="display:none; position:fixed; inset:0; background:rgba(26,26,46,0.92); z-index:80; flex-direction:column; align-items:center; justify-content:center; gap:20px;">
+  <div style="color:#888; font-size:11px; letter-spacing:0.2em;" id="stair-floor-label">4階</div>
+  <div style="color:#e8e0c8; font-size:14px; letter-spacing:0.2em;">階段</div>
+  <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+    <button id="stair-up-btn" onclick="goUpStair()" style="display:none; background:none; border:1px solid #555; color:#e8e0c8; padding:16px 48px; font-family:'Courier New',monospace; font-size:13px; letter-spacing:0.2em; cursor:pointer; align-items:center; gap:10px;">
+      ▲ 上の階へ
+    </button>
+    <button id="stair-down-btn" onclick="goDownStair()" style="display:none; background:none; border:1px solid #555; color:#e8e0c8; padding:16px 48px; font-family:'Courier New',monospace; font-size:13px; letter-spacing:0.2em; cursor:pointer; align-items:center; gap:10px;">
+      ▼ 下の階へ
+    </button>
+    <button onclick="closeStairMenu()" style="background:none; border:none; color:#555; padding:8px; font-family:'Courier New',monospace; font-size:11px; letter-spacing:0.2em; cursor:pointer;">
+      キャンセル
+    </button>
+  </div>
+</div>
+
+<!-- 捕まった警告 -->
+<div id="caught-overlay"></div>
+
+<!-- 階移動エフェクト -->
+<div id="floor-transition"></div>
+
+<!-- オーバーレイ -->
+<div id="overlay">
+  <h1>休み時間</h1>
+  <div class="sub">チャイムが鳴った。<br>10分で全部こなして<br>教室に戻れ。</div>
+  <div id="result-list"></div>
+  <button id="overlay-btn" onclick="startGame()">はじめる</button>
+</div>
+
+<script>
+// ===== キャンバスサイズ =====
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const TILE = 16;
+const COLS = 25;
+const ROWS = 16;
+const CW = COLS * TILE; // 400
+const CH = ROWS * TILE; // 256
+canvas.width = CW;
+canvas.height = CH;
+
+// CSS幅をウィンドウに合わせる
+function resizeCanvas() {
+  const w = Math.min(window.innerWidth, 400);
+  canvas.style.width = w + 'px';
+  canvas.style.height = (w * CH / CW) + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ===== カラー =====
+const C = {
+  hall:      '#c8bfa0',
+  room:      '#d4c9a8',
+  wall:      '#5a4e3c',
+  wall_hi:   '#7a6a54',
+  desk:      '#a07840',
+  desk_dark: '#8b6c3e',
+  chair:     '#6a5030',
+  window:    '#9cc8d8',
+  win_frame: '#7a6a54',
+  stair_a:   '#b8a888',
+  stair_b:   '#908060',
+  door_bg:   '#4a3020',
+  door_knob: '#c8a060',
+  vend:      '#3050a0',
+  vend_lit:  '#60a0ff',
+  toilet_f:  '#c8d8d0',
+  food_f:    '#d0c8a8',
+  locker:    '#7a6040',
+  locker_hi: '#9a8060',
+  blackboard:'#3a6040',
+  player:    '#e8c840',
+  player_b:  '#c8a020',
+  player_body:'#4080c0',
+  npc_a:     '#e87060',
+  npc_b:     '#60a8e8',
+  npc_c:     '#a0c870',
+  shadow:    'rgba(0,0,0,0.25)',
+  task_ok:   '#60c860',
+};
+
+// ===== タイル定数 =====
+const T = {
+  HALL:0, ROOM:1, WALL:2, DESK:3, CHAIR:4, WIN:5,
+  DOOR:6, STAIR_UP:7, STAIR_DOWN:8, VEND:9,
+  TOILET:10, FOOD:11, LOCKER:12, BOARD:13, GOAL:14
+};
+
+// ===== フロア定義 =====
+// 各フロアは ROWS×COLS のグリッド
+// generateFloor(floorNum) で生成
+
+function emptyMap() {
+  const m = [];
+  for (let y = 0; y < ROWS; y++) { m[y]=[]; for(let x=0;x<COLS;x++) m[y][x]=T.WALL; }
+  return m;
+}
+function fillRect(m,x1,y1,x2,y2,v){ for(let y=y1;y<=y2;y++) for(let x=x1;x<=x2;x++) m[y][x]=v; }
+function fillRow(m,y,x1,x2,v){ for(let x=x1;x<=x2;x++) m[y][x]=v; }
+function fillCol(m,x,y1,y2,v){ for(let y=y1;y<=y2;y++) m[y][x]=v; }
+
+function makeFloor1() {
+  const m = emptyMap();
+  // 廊下（y=7〜9）
+  fillRect(m,0,7,COLS-1,9,T.HALL);
+  // 外壁
+  fillRow(m,0,0,COLS-1,T.WALL); fillRow(m,ROWS-1,0,COLS-1,T.WALL);
+  fillCol(m,0,0,ROWS-1,T.WALL); fillCol(m,COLS-1,0,ROWS-1,T.WALL);
+
+  // 自販機コーナー（左上）
+  fillRect(m,1,1,8,6,T.ROOM);
+  fillRow(m,6,1,8,T.WALL); fillCol(m,9,1,6,T.WALL); fillRow(m,0,1,8,T.WALL); fillCol(m,0,1,6,T.WALL);
+  m[6][4]=T.DOOR; m[6][5]=T.DOOR;
+  m[1][2]=T.VEND; m[1][4]=T.VEND; m[1][6]=T.VEND;
+
+  // 食堂（右上）
+  fillRect(m,11,1,23,6,T.FOOD);
+  fillRow(m,6,11,23,T.WALL); fillCol(m,10,1,6,T.WALL); fillRow(m,0,11,23,T.WALL); fillCol(m,24,1,6,T.WALL);
+  m[6][15]=T.DOOR; m[6][16]=T.DOOR; m[6][17]=T.DOOR;
+  // 食堂テーブル
+  for(let x=12;x<=22;x+=4){ m[2][x]=T.DESK; m[2][x+1]=T.DESK; m[4][x]=T.DESK; m[4][x+1]=T.DESK; }
+
+  // トイレ（左下）
+  fillRect(m,1,10,7,15,T.TOILET);
+  fillRow(m,10,1,7,T.WALL); fillCol(m,8,10,15,T.WALL); fillRow(m,15,1,7,T.WALL); fillCol(m,0,10,15,T.WALL);
+  m[10][3]=T.DOOR; m[10][4]=T.DOOR;
+
+  // 階段（右下）
+  fillRect(m,18,10,23,15,T.STAIR_UP);
+  fillRow(m,10,18,23,T.WALL); fillCol(m,17,10,15,T.WALL); fillRow(m,15,18,23,T.WALL); fillCol(m,24,10,15,T.WALL);
+  m[10][20]=T.DOOR; m[10][21]=T.DOOR;
+
+  return m;
+}
+
+function makeFloor2or3(floor) {
+  const m = emptyMap();
+  fillRect(m,0,6,COLS-1,9,T.HALL);
+  fillRow(m,0,0,COLS-1,T.WALL); fillRow(m,ROWS-1,0,COLS-1,T.WALL);
+  fillCol(m,0,0,ROWS-1,T.WALL); fillCol(m,COLS-1,0,ROWS-1,T.WALL);
+
+  // 教室（左）
+  fillRect(m,1,1,11,5,T.ROOM);
+  fillRow(m,5,1,11,T.WALL); fillCol(m,12,1,5,T.WALL); fillRow(m,0,1,11,T.WALL); fillCol(m,0,1,5,T.WALL);
+  for(let x=1;x<=10;x+=3) m[0][x]=T.WIN;
+  m[5][5]=T.DOOR; m[5][6]=T.DOOR;
+  m[1][2]=T.DESK; m[1][3]=T.DESK; m[3][2]=T.DESK; m[3][3]=T.DESK;
+  m[1][7]=T.DESK; m[1][8]=T.DESK; m[3][7]=T.DESK; m[3][8]=T.DESK;
+  m[1][1]=T.BOARD;
+
+  // 教室（右）
+  fillRect(m,13,1,23,5,T.ROOM);
+  fillRow(m,5,13,23,T.WALL); fillCol(m,12,1,5,T.WALL); fillRow(m,0,13,23,T.WALL); fillCol(m,24,1,5,T.WALL);
+  for(let x=14;x<=22;x+=3) m[0][x]=T.WIN;
+  m[5][17]=T.DOOR; m[5][18]=T.DOOR;
+  m[1][14]=T.DESK; m[1][15]=T.DESK; m[3][14]=T.DESK; m[3][15]=T.DESK;
+  m[1][19]=T.DESK; m[1][20]=T.DESK; m[3][19]=T.DESK; m[3][20]=T.DESK;
+  m[1][13]=T.BOARD;
+
+  // トイレ（左下）
+  fillRect(m,1,10,6,15,T.TOILET);
+  fillRow(m,10,1,6,T.WALL); fillCol(m,7,10,15,T.WALL); fillRow(m,15,1,6,T.WALL); fillCol(m,0,10,15,T.WALL);
+  m[10][3]=T.DOOR; m[10][4]=T.DOOR;
+
+  // 階段上り（右上）
+  fillRect(m,19,1,23,5,T.STAIR_UP);
+  fillRow(m,5,19,23,T.WALL); fillCol(m,18,1,5,T.WALL); fillRow(m,0,19,23,T.WALL); fillCol(m,24,1,5,T.WALL);
+  m[5][20]=T.DOOR; m[5][21]=T.DOOR;
+
+  // 階段下り（右下）
+  fillRect(m,19,10,23,15,T.STAIR_DOWN);
+  fillRow(m,10,19,23,T.WALL); fillCol(m,18,10,15,T.WALL); fillRow(m,15,19,23,T.WALL); fillCol(m,24,10,15,T.WALL);
+  m[10][20]=T.DOOR; m[10][21]=T.DOOR;
+
+  return m;
+}
+
+function makeFloor4() {
+  const m = emptyMap();
+  fillRect(m,0,6,COLS-1,9,T.HALL);
+  fillRow(m,0,0,COLS-1,T.WALL); fillRow(m,ROWS-1,0,COLS-1,T.WALL);
+  fillCol(m,0,0,ROWS-1,T.WALL); fillCol(m,COLS-1,0,ROWS-1,T.WALL);
+
+  // 教室（自分の教室 - 左）
+  fillRect(m,1,1,14,5,T.ROOM);
+  fillRow(m,5,1,14,T.WALL); fillCol(m,15,1,5,T.WALL); fillRow(m,0,1,14,T.WALL); fillCol(m,0,1,5,T.WALL);
+  for(let x=1;x<=13;x+=3) m[0][x]=T.WIN;
+  m[5][6]=T.DOOR; m[5][7]=T.DOOR;
+  // 机を並べる（自分の席は中央）
+  [[2,2],[2,5],[2,9],[2,12],[4,2],[4,5],[4,9],[4,12]].forEach(([dx,dy])=>{
+    m[dy][dx]=T.DESK; m[dy][dx+1]=T.DESK;
+  });
+  m[1][1]=T.BOARD;
+
+  // ロッカー（右）
+  fillRect(m,17,1,23,5,T.ROOM);
+  fillRow(m,5,17,23,T.WALL); fillCol(m,16,1,5,T.WALL); fillRow(m,0,17,23,T.WALL); fillCol(m,24,1,5,T.WALL);
+  m[5][19]=T.DOOR; m[5][20]=T.DOOR;
+  for(let x=17;x<=23;x++) m[1][x]=T.LOCKER;
+  for(let x=17;x<=23;x++) m[2][x]=T.LOCKER;
+
+  // トイレ（左下）
+  fillRect(m,1,10,6,15,T.TOILET);
+  fillRow(m,10,1,6,T.WALL); fillCol(m,7,10,15,T.WALL); fillRow(m,15,1,6,T.WALL); fillCol(m,0,10,15,T.WALL);
+  m[10][3]=T.DOOR; m[10][4]=T.DOOR;
+
+  // ゴール（自分の席）
+  m[4][6]=T.GOAL;
+
+  // 階段（右下）
+  fillRect(m,19,10,23,15,T.STAIR_DOWN);
+  fillRow(m,10,19,23,T.WALL); fillCol(m,18,10,15,T.WALL); fillRow(m,15,19,23,T.WALL); fillCol(m,24,10,15,T.WALL);
+  m[10][20]=T.DOOR; m[10][21]=T.DOOR;
+
+  return m;
+}
+
+const FLOORS = [null, makeFloor1(), makeFloor2or3(2), makeFloor2or3(3), makeFloor4()];
+
+// ===== タスク定義 =====
+const TASK_DEFS = [
+  { id:'vending',  label:'ジュース', floor:1, x:4,  y:3,  msg:'ジュースを買った。' },
+  { id:'food',     label:'食券',     floor:1, x:17, y:3,  msg:'食券を取った。' },
+  { id:'toilet',   label:'トイレ',   floor:1, x:4,  y:12, msg:'トイレに行った。' },
+  { id:'locker',   label:'教科書',   floor:4, x:20, y:3,  msg:'教科書を取った。' },
+  { id:'goal',     label:'着席',     floor:4, x:6,  y:4,  msg:'間に合った！', isGoal:true },
+];
+
+// ===== ゲーム状態 =====
+let state = {};
+
+function initState() {
+  state = {
+    floor: 4,
+    px: 12 * TILE, py: 7 * TILE,
+    facing: 'down',
+    animFrame: 0, animTimer: 0,
+    isRunning: false, // 走り中フラグ
+    timeLeft: 600,
+    running: false,
+    tasks: TASK_DEFS.map(t => ({...t, done: false})),
+    nearSpot: null,
+    nearStair: null,
+    message: '',
+    msgTimer: 0,
+    stairCooldown: 0,
+    // 先生
+    teacher: {
+      floor: 4,       // 4階の廊下を巡回
+      px: 2 * TILE,
+      py: 7 * TILE,
+      facing: 'right',
+      dir: 1,         // 1=右, -1=左
+      speed: 0.8,
+      animFrame: 0,
+      animTimer: 0,
+    },
+    caught: false,       // 捕まり中フラグ
+    caughtTimer: 0,      // 捕まり演出タイマー
+    caughtCooldown: 0,   // 捕まり後の無敵時間
+  };
+}
+
+function isWalkable(t) {
+  return [T.HALL,T.ROOM,T.TOILET,T.FOOD,T.STAIR_UP,T.STAIR_DOWN,T.DOOR,T.GOAL].includes(t);
+}
+
+function tileAt(floor, px, py) {
+  const tx = Math.floor(px/TILE), ty = Math.floor(py/TILE);
+  if(tx<0||ty<0||tx>=COLS||ty>=ROWS) return T.WALL;
+  return FLOORS[floor][ty][tx];
+}
+
+function showMsg(msg, dur=200) { state.message=msg; state.msgTimer=dur; }
+
+// ===== 入力 =====
+const keys = {};
+document.addEventListener('keydown', e=>{ keys[e.key]=true; e.preventDefault(); });
+document.addEventListener('keyup',   e=>{ keys[e.key]=false; });
+
+// タッチ十字キー
+['up','down','left','right'].forEach(dir => {
+  const btn = document.getElementById('btn-'+dir);
+  const map = {up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight'};
+  btn.addEventListener('touchstart', e=>{ e.preventDefault(); keys[map[dir]]=true; btn.classList.add('pressed'); });
+  btn.addEventListener('touchend',   e=>{ e.preventDefault(); keys[map[dir]]=false; btn.classList.remove('pressed'); });
+  btn.addEventListener('mousedown',  e=>{ keys[map[dir]]=true; });
+  btn.addEventListener('mouseup',    e=>{ keys[map[dir]]=false; });
+});
+
+// 走るボタン
+const runBtn = document.getElementById('run-btn');
+function startRun(e){ e.preventDefault(); state.isRunning=true; runBtn.classList.add('active'); }
+function stopRun(e){ e.preventDefault(); state.isRunning=false; runBtn.classList.remove('active'); }
+runBtn.addEventListener('touchstart', startRun);
+runBtn.addEventListener('touchend',   stopRun);
+runBtn.addEventListener('mousedown',  startRun);
+runBtn.addEventListener('mouseup',    stopRun);
+// キーボードでも走れる（Shift）
+document.addEventListener('keydown', e=>{ if(e.key==='Shift'){ state.isRunning=true; runBtn.classList.add('active'); }});
+document.addEventListener('keyup',   e=>{ if(e.key==='Shift'){ state.isRunning=false; runBtn.classList.remove('active'); }});
+
+function doAction() {
+  if(!state.running) return;
+
+  // 階段にいる場合
+  if(state.nearStair) {
+    showStairMenu();
+    return;
+  }
+
+  // 通常スポット
+  if(state.nearSpot) {
+    const spot = state.nearSpot;
+    if(!spot.done) {
+      spot.done = true;
+      showMsg(spot.msg, 220);
+      updateTasksUI();
+      if(spot.isGoal) { endGame(true); return; }
+    }
+  }
+}
+
+function showStairMenu() {
+  state.stairMenuOpen = true;
+  state.running = false; // 一時停止
+
+  const menu = document.getElementById('stair-menu');
+  const upBtn = document.getElementById('stair-up-btn');
+  const downBtn = document.getElementById('stair-down-btn');
+
+  upBtn.style.display = (state.floor < 4) ? 'flex' : 'none';
+  downBtn.style.display = (state.floor > 1) ? 'flex' : 'none';
+  document.getElementById('stair-floor-label').innerText = state.floor + '階';
+
+  menu.style.display = 'flex';
+}
+
+function closeStairMenu() {
+  document.getElementById('stair-menu').style.display = 'none';
+  state.stairMenuOpen = false;
+  state.running = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function goUpStair() {
+  closeStairMenu();
+  changeFloor(state.floor + 1, 'up');
+}
+
+function goDownStair() {
+  closeStairMenu();
+  changeFloor(state.floor - 1, 'down');
+}
+
+// ===== 描画ヘルパー =====
+function px_(x){ return x; } // そのまま使うが明示のため
+
+// 床タイルのタイリングパターン（奥行き感）
+function drawFloor(px,py,baseColor,lineColor){
+  ctx.fillStyle=baseColor;
+  ctx.fillRect(px,py,TILE,TILE);
+  // タイル目地（横）
+  ctx.fillStyle=lineColor;
+  ctx.fillRect(px,py,TILE,1);
+  ctx.fillRect(px,py,1,TILE);
+  // 右下に微妙なハイライト
+  ctx.fillStyle='rgba(255,255,255,0.04)';
+  ctx.fillRect(px+1,py+1,TILE-2,3);
+}
+
+function drawWall(px,py){
+  // コンクリートブロック壁
+  ctx.fillStyle='#4e4438';
+  ctx.fillRect(px,py,TILE,TILE);
+  // ブロックの継ぎ目
+  ctx.fillStyle='#3a3028';
+  ctx.fillRect(px,py+TILE/2,TILE,1);
+  if((Math.floor(px/TILE)+Math.floor(py/TILE))%2===0){
+    ctx.fillRect(px+TILE/2,py,1,TILE/2);
+    ctx.fillRect(px,py+TILE/2,TILE/2,1);
+  } else {
+    ctx.fillRect(px+TILE/4,py,1,TILE/2);
+    ctx.fillRect(px+TILE/4*3,py+TILE/2,1,TILE/2);
+  }
+  // 上面ハイライト（奥行き感）
+  ctx.fillStyle='rgba(255,255,255,0.08)';
+  ctx.fillRect(px,py,TILE,2);
+  ctx.fillRect(px,py,2,TILE);
+}
+
+// ===== 描画 =====
+function drawTile(x, y, t) {
+  const px=x*TILE, py=y*TILE;
+
+  // ===== 床系 =====
+  if(t===T.HALL){
+    drawFloor(px,py,'#c0b898','rgba(0,0,0,0.12)');
+    return;
+  }
+  if(t===T.ROOM){
+    drawFloor(px,py,'#cec3a0','rgba(0,0,0,0.10)');
+    return;
+  }
+  if(t===T.TOILET){
+    // トイレ：白いタイル
+    ctx.fillStyle=(x+y)%2===0?'#d8e4e0':'#ccd8d4';
+    ctx.fillRect(px,py,TILE,TILE);
+    ctx.fillStyle='rgba(0,0,0,0.08)';
+    ctx.fillRect(px,py,TILE,1); ctx.fillRect(px,py,1,TILE);
+    return;
+  }
+  if(t===T.FOOD){
+    drawFloor(px,py,'#ccc0a0','rgba(0,0,0,0.10)');
+    return;
+  }
+  if(t===T.GOAL){
+    // 自分の席マーカー（点滅する床）
+    const a=0.15+0.1*Math.sin(Date.now()/300);
+    drawFloor(px,py,'#cec3a0','rgba(0,0,0,0.10)');
+    ctx.fillStyle=`rgba(200,168,75,${a})`;
+    ctx.fillRect(px,py,TILE,TILE);
+    return;
+  }
+
+  // ===== 壁 =====
+  if(t===T.WALL){
+    drawWall(px,py);
+    return;
+  }
+
+  // ===== 窓 =====
+  if(t===T.WIN){
+    // 窓枠（コンクリート）
+    ctx.fillStyle='#6a5e4e';
+    ctx.fillRect(px,py,TILE,TILE);
+    // ガラス部分（空の色）
+    ctx.fillStyle='#a8d0e8';
+    ctx.fillRect(px+2,py+2,TILE-4,TILE-4);
+    // 窓の桟（十字）
+    ctx.fillStyle='#7a6a58';
+    ctx.fillRect(px+TILE/2-1,py+2,2,TILE-4);
+    ctx.fillRect(px+2,py+TILE/2-1,TILE-4,2);
+    // 光の反射
+    ctx.fillStyle='rgba(255,255,255,0.4)';
+    ctx.fillRect(px+3,py+3,4,2);
+    ctx.fillRect(px+3,py+3,2,4);
+    return;
+  }
+
+  // ===== 机 =====
+  if(t===T.DESK){
+    // 机の天板（木目）
+    ctx.fillStyle='#9a7038';
+    ctx.fillRect(px,py,TILE,TILE);
+    // 木目線
+    ctx.fillStyle='#845e28';
+    ctx.fillRect(px+1,py+3,TILE-2,1);
+    ctx.fillRect(px+1,py+7,TILE-2,1);
+    ctx.fillRect(px+1,py+11,TILE-2,1);
+    // 天板の縁（手前側が暗い→奥行き感）
+    ctx.fillStyle='#5a3c18';
+    ctx.fillRect(px,py+TILE-3,TILE,3);
+    // 左側面
+    ctx.fillStyle='#703010';
+    ctx.fillRect(px,py,2,TILE);
+    // ハイライト（光が当たってる感）
+    ctx.fillStyle='rgba(255,255,255,0.15)';
+    ctx.fillRect(px+2,py,TILE-4,2);
+    return;
+  }
+
+  // ===== 椅子 =====
+  if(t===T.CHAIR){
+    drawFloor(px,py,'#cec3a0','rgba(0,0,0,0.10)');
+    // 椅子の座面
+    ctx.fillStyle='#5a4028';
+    ctx.fillRect(px+2,py+2,TILE-4,TILE-6);
+    ctx.fillStyle='#7a5838';
+    ctx.fillRect(px+2,py+2,TILE-4,3);
+    // 脚
+    ctx.fillStyle='#404040';
+    ctx.fillRect(px+3,py+TILE-5,2,4);
+    ctx.fillRect(px+TILE-5,py+TILE-5,2,4);
+    return;
+  }
+
+  // ===== ドア =====
+  if(t===T.DOOR){
+    // 床を先に描く
+    drawFloor(px,py,'#c0b898','rgba(0,0,0,0.12)');
+    // 開いたドア（壁に沿って）
+    ctx.fillStyle='#7a5030';
+    ctx.fillRect(px,py,3,TILE);
+    ctx.fillStyle='#5a3818';
+    ctx.fillRect(px,py,3,2);
+    ctx.fillRect(px,py+TILE-2,3,2);
+    // ドア枠
+    ctx.fillStyle='#9a7050';
+    ctx.fillRect(px,py,1,TILE);
+    // 入口を示す矢印風マーカー
+    ctx.fillStyle='rgba(200,168,75,0.3)';
+    ctx.fillRect(px+4,py+6,TILE-7,4);
+    return;
+  }
+
+  // ===== 自販機 =====
+  if(t===T.VEND){
+    // 本体
+    ctx.fillStyle='#2848a0';
+    ctx.fillRect(px,py,TILE,TILE);
+    // 側面（立体感）
+    ctx.fillStyle='#1a3070';
+    ctx.fillRect(px+TILE-3,py,3,TILE);
+    ctx.fillStyle='#3860c0';
+    ctx.fillRect(px,py,2,TILE);
+    // ディスプレイ
+    ctx.fillStyle='#80c0ff';
+    ctx.fillRect(px+2,py+1,TILE-7,6);
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(px+3,py+2,3,1);
+    // ボタン群
+    ctx.fillStyle='#ff4040'; ctx.fillRect(px+2,py+8,3,2);
+    ctx.fillStyle='#40ff40'; ctx.fillRect(px+6,py+8,3,2);
+    ctx.fillStyle='#4080ff'; ctx.fillRect(px+10,py+8,3,2);
+    ctx.fillStyle='#ffff40'; ctx.fillRect(px+2,py+11,3,2);
+    ctx.fillStyle='#ff8040'; ctx.fillRect(px+6,py+11,3,2);
+    // 取り出し口
+    ctx.fillStyle='#101828';
+    ctx.fillRect(px+2,py+TILE-4,TILE-5,3);
+    // ランプ
+    const lit=Math.sin(Date.now()/700)>0;
+    ctx.fillStyle=lit?'#80ffff':'#204060';
+    ctx.fillRect(px+TILE-5,py+2,2,2);
+    return;
+  }
+
+  // ===== 階段 =====
+  if(t===T.STAIR_UP||t===T.STAIR_DOWN){
+    const up=t===T.STAIR_UP;
+    // ベース
+    ctx.fillStyle=up?'#b0a880':'#908868';
+    ctx.fillRect(px,py,TILE,TILE);
+    // ステップ（上から見た段）
+    const steps=4;
+    for(let i=0;i<steps;i++){
+      const sy=py + Math.floor(i*TILE/steps);
+      const sh=Math.floor(TILE/steps);
+      // 踏み面
+      ctx.fillStyle=i%2===0?(up?'#c8c0a0':'#a89878'):(up?'#b0a880':'#908868');
+      ctx.fillRect(px,sy,TILE,sh);
+      // 段鼻（手前エッジを明るく）
+      ctx.fillStyle='rgba(255,255,255,0.25)';
+      ctx.fillRect(px,up?sy:sy+sh-1,TILE,1);
+      // 影
+      ctx.fillStyle='rgba(0,0,0,0.18)';
+      ctx.fillRect(px,up?sy+sh-1:sy,TILE,1);
+    }
+    // 方向矢印
+    ctx.fillStyle='rgba(255,255,255,0.6)';
+    ctx.font='bold 9px monospace';
+    ctx.fillText(up?'↑':'↓',px+4,py+10);
+    // 手すり（左端）
+    ctx.fillStyle='#706050';
+    ctx.fillRect(px,py,2,TILE);
+    ctx.fillStyle='#a09070';
+    ctx.fillRect(px,py,1,TILE);
+    return;
+  }
+
+  // ===== ロッカー =====
+  if(t===T.LOCKER){
+    // ロッカー本体
+    ctx.fillStyle='#6a8070';
+    ctx.fillRect(px,py,TILE,TILE);
+    // 扉の境界線
+    ctx.fillStyle='#4a6050';
+    ctx.fillRect(px+TILE/2-1,py,2,TILE);
+    ctx.fillRect(px,py+TILE/2,TILE,1);
+    // 扉のハイライト
+    ctx.fillStyle='rgba(255,255,255,0.1)';
+    ctx.fillRect(px+1,py+1,TILE/2-3,3);
+    ctx.fillRect(px+TILE/2+2,py+1,TILE/2-3,3);
+    // 鍵穴（上の扉）
+    ctx.fillStyle='#303830';
+    ctx.fillRect(px+TILE/2-4,py+5,3,3);
+    ctx.fillRect(px+TILE/2-3,py+8,1,2);
+    // 鍵穴（下の扉）
+    ctx.fillStyle='#303830';
+    ctx.fillRect(px+TILE/2-4,py+TILE/2+4,3,3);
+    ctx.fillRect(px+TILE/2-3,py+TILE/2+7,1,2);
+    // 側面（立体感）
+    ctx.fillStyle='#384840';
+    ctx.fillRect(px+TILE-2,py,2,TILE);
+    return;
+  }
+
+  // ===== 黒板 =====
+  if(t===T.BOARD){
+    // 黒板本体
+    ctx.fillStyle='#2e5038';
+    ctx.fillRect(px,py,TILE,TILE);
+    // 枠
+    ctx.fillStyle='#7a5838';
+    ctx.fillRect(px,py,TILE,2);
+    ctx.fillRect(px,py+TILE-2,TILE,2);
+    ctx.fillRect(px,py,2,TILE);
+    ctx.fillRect(px+TILE-2,py,2,TILE);
+    // チョークの書き跡
+    ctx.fillStyle='rgba(255,255,255,0.15)';
+    ctx.fillRect(px+3,py+4,TILE-8,1);
+    ctx.fillRect(px+3,py+7,TILE-10,1);
+    ctx.fillRect(px+3,py+10,TILE-6,1);
+    // チョーク置き場
+    ctx.fillStyle='#8a6848';
+    ctx.fillRect(px+2,py+TILE-4,TILE-4,2);
+    return;
+  }
+}
+
+function drawMap() {
+  const map = FLOORS[state.floor];
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) drawTile(x,y,map[y][x]);
+
+  // スポットマーカー
+  state.tasks.forEach(task => {
+    if(task.done || task.floor !== state.floor) return;
+    const px=task.x*TILE, py=task.y*TILE;
+    const alpha=0.5+0.4*Math.sin(Date.now()/400);
+    ctx.fillStyle=`rgba(255,220,60,${alpha})`;
+    ctx.fillRect(px+4,py-7,8,7);
+    ctx.fillStyle='#fff';
+    ctx.font='7px monospace';
+    ctx.fillText('!',px+6,py-1);
+  });
+}
+
+function drawPlayer() {
+  const px=state.px, py=state.py;
+  const f=state.animFrame;
+  const dir=state.facing;
+
+  // 影
+  ctx.fillStyle='rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px+8,py+15,6,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // 足（向きとアニメで変化）
+  const leg1y = f===0 ? 1 : 0;
+  const leg2y = f===1 ? 1 : 0;
+  // ズボン
+  ctx.fillStyle='#303868';
+  ctx.fillRect(px+4,py+10,3,4+leg1y);
+  ctx.fillRect(px+9,py+10,3,4+leg2y);
+  // 靴
+  ctx.fillStyle='#202020';
+  ctx.fillRect(px+3,py+13+leg1y,4,2);
+  ctx.fillRect(px+8,py+13+leg2y,4,2);
+  ctx.fillStyle='#404040';
+  ctx.fillRect(px+3,py+13+leg1y,4,1);
+
+  // 胴体（制服）
+  ctx.fillStyle='#2a5898';
+  ctx.fillRect(px+3,py+5,10,6);
+  // ボタン
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(px+7,py+6,1,1);
+  ctx.fillRect(px+7,py+8,1,1);
+  // 衿
+  ctx.fillStyle='#f0f0f0';
+  ctx.fillRect(px+6,py+5,4,2);
+  ctx.fillStyle='#2a5898';
+  ctx.fillRect(px+7,py+5,2,2);
+  // 上着のハイライト
+  ctx.fillStyle='rgba(255,255,255,0.18)';
+  ctx.fillRect(px+3,py+5,10,2);
+  // 袖
+  ctx.fillStyle='#2a5898';
+  ctx.fillRect(px+1,py+6,3,4);
+  ctx.fillRect(px+12,py+6,3,4);
+  // 手
+  ctx.fillStyle='#e8c8a0';
+  ctx.fillRect(px+1,py+9,3,2);
+  ctx.fillRect(px+12,py+9,3,2);
+
+  // 頭
+  ctx.fillStyle='#e8c8a0';
+  ctx.fillRect(px+4,py,8,6);
+  // 髪（向きで変化）
+  ctx.fillStyle='#2a1a08';
+  if(dir==='up'){
+    ctx.fillRect(px+4,py,8,3);
+  } else if(dir==='down'){
+    ctx.fillRect(px+4,py,8,2);
+    ctx.fillRect(px+4,py,1,4);
+    ctx.fillRect(px+11,py,1,4);
+  } else {
+    ctx.fillRect(px+4,py,8,2);
+    ctx.fillRect(dir==='right'?px+4:px+11,py,1,5);
+  }
+  // 首
+  ctx.fillStyle='#d8b890';
+  ctx.fillRect(px+6,py+5,4,2);
+
+  // 顔（向きで変化）
+  ctx.fillStyle='#1a1008';
+  if(dir==='down'){
+    // 目
+    ctx.fillRect(px+6,py+2,1,2);
+    ctx.fillRect(px+9,py+2,1,2);
+    // 白目
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(px+6,py+2,1,1);
+    ctx.fillRect(px+9,py+2,1,1);
+    ctx.fillStyle='#1a1008';
+    ctx.fillRect(px+6,py+3,1,1);
+    ctx.fillRect(px+9,py+3,1,1);
+  } else if(dir==='up'){
+    // 後ろ姿なので顔なし
+  } else {
+    // 横顔
+    const eyeX = dir==='right' ? px+10 : px+6;
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(eyeX,py+2,2,2);
+    ctx.fillStyle='#1a1008';
+    ctx.fillRect(dir==='right'?eyeX+1:eyeX,py+3,1,1);
+  }
+
+  // ランドセル/カバン（後ろ向き時）
+  if(dir==='up'){
+    ctx.fillStyle='#8b2020';
+    ctx.fillRect(px+4,py+5,8,5);
+    ctx.fillStyle='#6a1818';
+    ctx.fillRect(px+4,py+9,8,1);
+  }
+}
+
+function drawTeacher() {
+  const t = state.teacher;
+  if(t.floor !== state.floor) return;
+
+  const px=t.px, py=t.py;
+  const f=t.animFrame;
+
+  // 影
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(px+8,py+15,6,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // 足
+  ctx.fillStyle='#1a1a30';
+  ctx.fillRect(px+4,py+10,3,4+(f===0?1:0));
+  ctx.fillRect(px+9,py+10,3,4+(f===1?1:0));
+  ctx.fillStyle='#101018';
+  ctx.fillRect(px+3,py+13+(f===0?1:0),4,2);
+  ctx.fillRect(px+8,py+13+(f===1?1:0),4,2);
+
+  // 胴体（スーツ）
+  ctx.fillStyle='#2a2a4a';
+  ctx.fillRect(px+3,py+5,10,6);
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(px+6,py+5,4,2); // 白シャツ
+  ctx.fillStyle='#c84040';
+  ctx.fillRect(px+7,py+5,2,5); // ネクタイ
+  ctx.fillStyle='rgba(255,255,255,0.1)';
+  ctx.fillRect(px+3,py+5,10,2);
+  // 腕
+  ctx.fillStyle='#2a2a4a';
+  ctx.fillRect(px+1,py+6,3,4);
+  ctx.fillRect(px+12,py+6,3,4);
+  // 手
+  ctx.fillStyle='#d8b890';
+  ctx.fillRect(px+1,py+9,3,2);
+  ctx.fillRect(px+12,py+9,3,2);
+
+  // 頭
+  ctx.fillStyle='#d8b890';
+  ctx.fillRect(px+4,py,8,6);
+  // 髪（白髪）
+  ctx.fillStyle='#d0d0c8';
+  ctx.fillRect(px+4,py,8,2);
+  // 眼鏡
+  ctx.fillStyle='#404040';
+  ctx.fillRect(px+5,py+3,3,2);
+  ctx.fillRect(px+9,py+3,3,2);
+  ctx.fillRect(px+8,py+4,1,1);
+  // 首
+  ctx.fillStyle='#c8a880';
+  ctx.fillRect(px+6,py+5,4,2);
+
+  // 捕まり無敵中は点滅
+  if(state.caughtCooldown>0 && Math.floor(state.caughtCooldown/200)%2===0) return;
+
+  // 視野インジケーター（走ってる時だけ表示）
+  if(state.isRunning && state.caughtCooldown<=0){
+    const range = 5*TILE;
+    ctx.fillStyle='rgba(255,60,60,0.08)';
+    ctx.fillRect(t.px-range, t.py-range/2, range*2+TILE, range);
+    ctx.strokeStyle='rgba(255,60,60,0.2)';
+    ctx.strokeRect(t.px-range, t.py-range/2, range*2+TILE, range);
+  }
+}
+function updatePlayer(dt) {
+  if(state.caught) return; // 捕まり中は動けない
+
+  let nx=state.px, ny=state.py, moving=false;
+  const spd = state.isRunning ? 3.5 : 2;
+
+  if(keys['ArrowLeft'] ||keys['a']){nx-=spd;state.facing='left'; moving=true;}
+  if(keys['ArrowRight']||keys['d']){nx+=spd;state.facing='right';moving=true;}
+  if(keys['ArrowUp']   ||keys['w']){ny-=spd;state.facing='up';   moving=true;}
+  if(keys['ArrowDown'] ||keys['s']){ny+=spd;state.facing='down'; moving=true;}
+
+  const check=(x,y)=>{
+    const corners=[[x+2,y+8],[x+13,y+8],[x+2,y+15],[x+13,y+15]];
+    return corners.every(([cx,cy])=>isWalkable(tileAt(state.floor,cx,cy)));
+  };
+  if(check(nx,state.py)) state.px=Math.max(0,Math.min(CW-16,nx));
+  if(check(state.px,ny)) state.py=Math.max(0,Math.min(CH-16,ny));
+
+  if(moving){ state.animTimer+=dt; if(state.animTimer>180){state.animFrame=1-state.animFrame;state.animTimer=0;} }
+  else state.animFrame=0;
+
+  // 階段近接判定
+  const cx2=Math.floor((state.px+8)/TILE), cy2a=Math.floor((state.py+8)/TILE);
+  const tileUnder=FLOORS[state.floor][cy2a][cx2];
+  state.nearStair = (tileUnder===T.STAIR_UP||tileUnder===T.STAIR_DOWN) ? tileUnder : null;
+
+  // スポット近接判定
+  const px=Math.floor((state.px+8)/TILE), py2=Math.floor((state.py+8)/TILE);
+  let near=null;
+  state.tasks.forEach(task=>{
+    if(task.done||task.floor!==state.floor) return;
+    const dist=Math.abs(px-task.x)+Math.abs(py2-task.y);
+    if(dist<=2) near=task;
+  });
+  state.nearSpot=near;
+
+  // アクションボタンとメッセージ
+  const btn=document.getElementById('action-btn');
+  if(state.nearStair){
+    btn.classList.add('active');
+    showMsg('階段：[使う]で昇降', 30);
+  } else if(near && !near.done){
+    btn.classList.add('active');
+    showMsg(`[使う] ${near.label}`, 30);
+  } else {
+    btn.classList.remove('active');
+  }
+}
+
+function updateTeacher(dt) {
+  const t = state.teacher;
+  if(t.floor !== state.floor) return;
+
+  // 廊下を左右に巡回
+  t.px += t.dir * t.speed * (dt/16);
+  t.facing = t.dir > 0 ? 'right' : 'left';
+
+  // 端で折り返し
+  if(t.px > 18*TILE) { t.dir=-1; t.px=18*TILE; }
+  if(t.px < 1*TILE)  { t.dir= 1; t.px=1*TILE;  }
+
+  // 歩きアニメ
+  t.animTimer+=dt;
+  if(t.animTimer>250){ t.animFrame=1-t.animFrame; t.animTimer=0; }
+
+  // 捕まり無敵時間
+  if(state.caughtCooldown>0){ state.caughtCooldown-=dt; return; }
+
+  // 走っているときだけ捕まる判定
+  if(!state.isRunning) return;
+
+  // 先生との距離
+  const dx = state.px - t.px;
+  const dy = state.py - t.py;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  // 先生の視野：同じ廊下エリア（y近い）かつ5タイル以内
+  const playerTileY = Math.floor((state.py+8)/TILE);
+  const teacherTileY = Math.floor((t.py+8)/TILE);
+  const sameRow = Math.abs(playerTileY - teacherTileY) <= 2;
+
+  if(dist < 5*TILE && sameRow) {
+    triggerCaught();
+  }
+}
+
+function triggerCaught() {
+  state.caught = true;
+  state.caughtTimer = 180; // 約3秒間演出
+  state.isRunning = false;
+  document.getElementById('run-btn').classList.remove('active');
+  document.getElementById('caught-overlay').style.display='block';
+  showMsg('廊下を走らない！　（−30秒）', 300);
+}
+
+function updateCaught(dt) {
+  if(!state.caught) return;
+  state.caughtTimer -= dt/16;
+  if(state.caughtTimer<=0){
+    state.caught = false;
+    state.caughtCooldown = 3000; // 3秒無敵
+    state.timeLeft = Math.max(0, state.timeLeft - 30); // -30秒
+    document.getElementById('caught-overlay').style.display='none';
+  }
+}
+
+function changeFloor(newFloor, dir) {
+  const el = document.getElementById('floor-transition');
+  el.style.display='flex';
+  el.innerText = newFloor + '階';
+
+  // 移動にタイムペナルティ（10秒）
+  state.timeLeft = Math.max(0, state.timeLeft - 10);
+
+  setTimeout(()=>{
+    state.floor = newFloor;
+    if(dir==='up') {
+      state.px = 20*TILE; state.py = 12*TILE;
+    } else {
+      state.px = 20*TILE; state.py = 3*TILE;
+    }
+    document.getElementById('floor-badge').innerText = newFloor+'F';
+    el.style.display='none';
+    state.running = true;
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }, 400);
+}
+
+
+let lastTime=0;
+
+function loop(ts) {
+  if(!state.running) return;
+  const dt=Math.min(ts-lastTime,50);
+  lastTime=ts;
+
+  updatePlayer(dt);
+  updateTeacher(dt);
+  updateCaught(dt);
+
+  // タイマー
+  if(!state.caught){
+    state.timeLeft-=dt/1000;
+  }
+  if(state.timeLeft<=0){ state.timeLeft=0; state.running=false; endGame(false); return; }
+  const mins=Math.floor(state.timeLeft/60);
+  const secs=Math.floor(state.timeLeft%60);
+  document.getElementById('timer-text').innerText=`${mins}:${secs.toString().padStart(2,'0')}`;
+  document.getElementById('timer-bar').style.width=(state.timeLeft/600*100)+'%';
+  document.getElementById('timer-bar').style.background=state.timeLeft<60?'#c86060':'#c8a84b';
+
+  if(state.msgTimer>0){ state.msgTimer-=dt/16; }
+  else state.message='';
+
+  // 描画
+  ctx.clearRect(0,0,CW,CH);
+  drawMap();
+  drawTeacher();
+  drawPlayer();
+
+  document.getElementById('message').innerText=state.message||'　';
+
+  requestAnimationFrame(loop);
+}
+
+// ===== UI =====
+function updateTasksUI() {
+  const row=document.getElementById('tasks-row');
+  row.innerHTML='';
+  state.tasks.forEach(task=>{
+    const chip=document.createElement('div');
+    chip.className='task-chip'+(task.done?' done':'')+(state.nearSpot===task&&!task.done?' active':'');
+    chip.innerText=(task.done?'✓ ':'')+task.label+(task.floor!==state.floor?` (${task.floor}F)`:'');
+    row.appendChild(chip);
+  });
+}
+
+// ===== ゲーム開始・終了 =====
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('caught-overlay').style.display='none';
+  initState();
+  state.running=true;
+  document.getElementById('floor-badge').innerText='4F';
+  updateTasksUI();
+
+  // タスクUIを定期更新
+  setInterval(()=>{ if(state.running) updateTasksUI(); }, 500);
+
+  lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function endGame(cleared) {
+  state.running=false;
+  const overlay=document.getElementById('overlay');
+  overlay.style.display='flex';
+  overlay.querySelector('h1').innerText=cleared?'間に合った':'チャイム';
+
+  const list=document.getElementById('result-list');
+  list.style.display='block';
+  const doneTasks=state.tasks.filter(t=>t.done);
+  list.innerHTML=state.tasks.map(t=>
+    `<div class="${t.done?'ok':'ng'}">${t.done?'✓':'✗'} ${t.label} (${t.floor}F)</div>`
+  ).join('')+
+  `<div style="margin-top:12px;color:#555">残り時間: ${Math.floor(state.timeLeft)}秒</div>`;
+
+  const btn=document.getElementById('overlay-btn');
+  btn.innerText='もう一度';
+  btn.onclick=()=>{ list.style.display='none'; startGame(); };
+}
+
+// 初期描画
+initState();
+ctx.clearRect(0,0,CW,CH);
+drawMap();
+drawPlayer();
+</script>
+</body>
+</html>
